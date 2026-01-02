@@ -33,12 +33,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
-        const participantsHTML =
-          details.participants && details.participants.length
-            ? `<p><strong>Participants:</strong></p><ul class="participants-list">${details.participants
-                .map((p) => `<li>${escapeHTML(p)}<span class="participant-badge">Signed</span></li>`)
-                .join("")}</ul>`
-            : '<p class="info">No participants yet.</p>';
+        let participantsHTML;
+        const hasParticipants = details.participants && details.participants.length;
+        if (hasParticipants) {
+          participantsHTML = `<p><strong>Participants:</strong></p><div class="participants-container"></div>`;
+        } else {
+          participantsHTML = '<p class="info">No participants yet.</p>';
+        }
 
         activityCard.innerHTML = `
           <h4>${escapeHTML(name)}</h4>
@@ -49,6 +50,68 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
 
         activitiesList.appendChild(activityCard);
+
+        // If there are participants, create the list with delete buttons
+        if (hasParticipants) {
+          const container = activityCard.querySelector('.participants-container');
+          const ul = document.createElement('ul');
+          ul.className = 'participants-list';
+
+          details.participants.forEach((p) => {
+            const li = document.createElement('li');
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = p;
+            nameSpan.className = 'participant-name';
+
+            const badge = document.createElement('span');
+            badge.className = 'participant-badge';
+            badge.textContent = 'Signed';
+
+            const btn = document.createElement('button');
+            btn.className = 'delete-participant';
+            btn.title = 'Unregister participant';
+            btn.textContent = '✖';
+
+            btn.addEventListener('click', async () => {
+              try {
+                const resp = await fetch(
+                  `/activities/${encodeURIComponent(name)}/unregister?email=${encodeURIComponent(p)}`,
+                  { method: 'POST' }
+                );
+
+                const result = await resp.json();
+                if (resp.ok) {
+                  messageDiv.textContent = result.message;
+                  messageDiv.className = 'success';
+                  messageDiv.classList.remove('hidden');
+                  // Refresh activities to update counts and lists
+                  fetchActivities();
+                } else {
+                  messageDiv.textContent = result.detail || 'Failed to unregister';
+                  messageDiv.className = 'error';
+                  messageDiv.classList.remove('hidden');
+                }
+
+                setTimeout(() => {
+                  messageDiv.classList.add('hidden');
+                }, 4000);
+              } catch (err) {
+                console.error('Error unregistering:', err);
+                messageDiv.textContent = 'Failed to unregister. Please try again.';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+              }
+            });
+
+            li.appendChild(nameSpan);
+            li.appendChild(badge);
+            li.appendChild(btn);
+            ul.appendChild(li);
+          });
+
+          container.appendChild(ul);
+        }
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -83,6 +146,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the new participant appears immediately
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
